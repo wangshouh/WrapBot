@@ -1,4 +1,4 @@
-import { Bot, Context, session, type SessionFlavor } from "grammy";
+import { Bot, Context, GrammyError, HttpError, session, type SessionFlavor } from "grammy";
 import { formatEther, isAddress, parseEther } from "viem";
 import { existAgentName, getAgenctBurnPrice, getAgencyStrategy, getAgentMaxSupply, getAgentMintPrice, getAgentName, getERC20Name, isApproveOrOwner, unwrapAgency, wrapAgency } from "./utils/AgencyStrategy";
 import { Menu, MenuRange } from "@grammyjs/menu";
@@ -46,7 +46,7 @@ const addAgency = async (conversation: MyConversation, ctx: MyContext) => {
                         fmt`Burn Fee Percent: ${(agencyData.agencyInstance.burnFeePercent / 100).toFixed(2) + '%'}`
                     )
                 )
-    
+
                 await prisma.agency.create({
                     data: {
                         accounId: ctx.from!.id,
@@ -94,7 +94,7 @@ const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyConte
 const unwrapAgencyConversation = async (conversation: MyConversation, ctx: MyContext) => {
     const agencyAddress = ctx.session.agencyAddress as `0x${string}`;
     const agencyStrategy = await getAgencyStrategy(agencyAddress)
-    
+
     await ctx.reply("Please enter Agent NFT ID: ");
 
     const { message: agencyTokenId } = await conversation.wait();
@@ -215,6 +215,19 @@ bot.command("check", async (ctx) => {
         }
     }
 })
+
+bot.catch((err) => {
+    const ctx = err.ctx;
+    console.error(`Error while handling update ${ctx.update.update_id}:`);
+    const e = err.error;
+    if (e instanceof GrammyError) {
+        console.error("Error in request:", e.description);
+    } else if (e instanceof HttpError) {
+        console.error("Could not contact Telegram:", e);
+    } else {
+        console.error("Unknown error:", e);
+    }
+});
 
 bot.start().then(
     async () => await prisma.$disconnect()
