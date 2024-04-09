@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id             Int              @id @default(autoincrement())
+  telegramUserId BigInt           @unique
+  address        String           @default("0")
+  createdAt      DateTime         @default(now())
+  tokens         AccountBalance[]
+  agencys        Agency[]
+}
+
+model AccountBalance {
+  id           Int     @id @default(autoincrement())
+  accounId     BigInt  @unique
+  account      Account @relation(fields: [accounId], references: [telegramUserId])
+  tokenAddress String
+  tokenName    String
+  balance      Float
+}
+
+model Agency {
+  id            Int     @id @default(autoincrement())
+  accounId      BigInt
+  account       Account @relation(fields: [accounId], references: [telegramUserId])
+  agencyName    String
+  agencyAddress String
+  agentAddress  String
+}

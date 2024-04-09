@@ -1,0 +1,21 @@
+{
+  "name": "wrapbot",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@grammyjs/conversations": "^1.2.0",
+    "@grammyjs/menu": "^1.2.1",
+    "@grammyjs/parse-mode": "^1.9.0",
+    "@prisma/client": "5.11.0",
+    "grammy": "^1.21.1",
+    "graphql": "^16.8.1",
+    "prisma": "^5.11.0",
+    "viem": "^2.8.14"
+  }
+}
