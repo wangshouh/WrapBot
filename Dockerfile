@@ -1,14 +1,13 @@
-FROM node:19-alpine
+FROM oven/bun:1
 
 # Create app directory
 WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-RUN npm install
+RUN bun install
 COPY . . 
-EXPOSE 3000
 
-RUN npx prisma generate
+RUN bunx prisma generate
 
-CMD [ "npm", "run", "dev"]
+CMD [ "bun", "run", "index.ts" ]
