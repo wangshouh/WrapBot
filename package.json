@@ -5,6 +5,9 @@
   "devDependencies": {
     "@types/bun": "latest"
   },
+  "scripts": {
+    "dev": "ts-node index"
+  },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
@@ -16,6 +19,7 @@
     "grammy": "^1.21.1",
     "graphql": "^16.8.1",
     "prisma": "^5.11.0",
-    "viem": "^2.8.14"
+    "viem": "^2.8.14",
+    "ts-node": "^10.9.2"
   }
 }
