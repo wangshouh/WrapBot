@@ -6,6 +6,7 @@ import { getTelegramAddress, getTelegramPrivKey } from "./Account"
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 import { routerABI } from "../abi/router"
+import { printSchema } from "graphql"
 
 export const getAgencyStrategy = async (agencyAddress: `0x${string}`) => {
     const agencyStrategy = await publicClient.readContract({
@@ -235,7 +236,6 @@ export const unwrapAgency = async (tokenId: bigint, agencyAddress: `0x${string}`
     })
 
     const burnHash = await walletClient.writeContract(request)
-
     // console.log(`Unwrap Hash: ${chalk.blue(burnHash)}`)
 
     return burnHash

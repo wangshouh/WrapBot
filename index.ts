@@ -7,13 +7,11 @@ import { bold, fmt, hydrateReply, code, link } from "@grammyjs/parse-mode";
 import type { ParseModeFlavor } from "@grammyjs/parse-mode";
 import { conversations, type Conversation, type ConversationFlavor, createConversation } from "@grammyjs/conversations";
 import { prisma } from "./utils/config";
-import { getAgencyInfo } from "./utils/GraphData";
-import { getBalance } from "viem/actions";
-import { connect } from "bun";
+import { getAgencyInfo, getAgentInfo } from "./utils/GraphData";
 
 interface SessionData {
     agencyAddress: string;
-    // slippagePrice: number;
+    wrapPrice: bigint;
 }
 
 type MyContext = Context & ConversationFlavor & ParseModeFlavor<Context> & SessionFlavor<SessionData>;
@@ -93,6 +91,7 @@ const addAgency = async (conversation: MyConversation, ctx: MyContext) => {
 
 const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyContext) => {
     const agencyAddress = ctx.session.agencyAddress as `0x${string}`;
+    const wrapPrice = ctx.session.wrapPrice;
     // const agencyStrategy = await getAgencyStrategy(agencyAddress)
     const agencyStrategy = await getAgencyDataFromDb(agencyAddress as `0x${string}`)!
 
@@ -100,25 +99,29 @@ const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyConte
     const { message: slippageMessage } = await conversation.wait();
     const slippagePrice = parseUnits(slippageMessage!.text!, agencyStrategy!.token!.decimals!);
 
-    await ctx.reply("Please enter Agent Name: ");
-    const { message: agentName } = await conversation.wait();
-
-    // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
-
-    const existName = await existAgentName(agentName!.text!, agencyStrategy!.agentAddress as `0x${string}`)
-
-    if (existName) {
-        await ctx.reply("Agent name already exists")
+    if (slippagePrice < wrapPrice) {
+        ctx.replyFmt(fmt`Slippage price less than wrap price`)
     } else {
+        await ctx.reply("Please enter Agent Name: ");
+        const { message: agentName } = await conversation.wait();
+    
         // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
-        const normalName = agentName!.text!.toLowerCase()
-
-        if (agencyStrategy?.tokenAddress === zeroAddress) {
-            const { tokenId, mintHash } = await wrapAgency(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
-            await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+    
+        const existName = await existAgentName(agentName!.text!, agencyStrategy!.agentAddress as `0x${string}`)
+    
+        if (existName) {
+            await ctx.reply("Agent name already exists")
         } else {
-            const { tokenId, mintHash } = await wrapAgencyByRouter(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
-            await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+            // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
+            const normalName = agentName!.text!.toLowerCase()
+    
+            if (agencyStrategy?.tokenAddress === zeroAddress) {
+                const { tokenId, mintHash } = await wrapAgency(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
+                await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+            } else {
+                const { tokenId, mintHash } = await wrapAgencyByRouter(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
+                await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+            }
         }
     }
 }
@@ -166,12 +169,29 @@ const walletMenu = new Menu<ParseModeFlavor<Context>>('wallet')
         )
     });
 
+const deleteMenu = new Menu<ParseModeFlavor<MyContext>>('deleteAgency')
+    .text("Delete", async (ctx) => {
+        await prisma.agency.delete({
+            where: {
+                accountId_agencyAddress: {
+                    accountId: BigInt(ctx.from!.id),
+                    agencyAddress: ctx.session.agencyAddress                  
+                }
+            }
+        })
+        await ctx.reply("Delete Success")
+    })
+
 const wrapAndUnwrapMenu = new Menu<ParseModeFlavor<MyContext>>('wrapAndUnwrap')
     .text("Wrap", async (ctx) => {
         await ctx.conversation.enter("wrapAgencyConversation")
     })
     .text("Unwrap", async (ctx) => {
-        await ctx.conversation.enter("unwrapAgencyConversation")
+        // await ctx.conversation.enter("unwrapAgencyConversation")
+        await ctx.replyFmt(
+            fmt`Select Agent to unwrap`,
+            { reply_markup: unwrapMenu }
+        )
     }).row()
     .text("Delete", async (ctx) => {
         await prisma.agency.delete({
@@ -200,6 +220,7 @@ dynamicMenu
                     const agencyAddress = agency.agencyAddress as `0x${string}`
                     // const agencyStrategy = await getAgencyStrategy(agencyAddress)
                     const wrapAgencyPrice = await getAgentMintPrice(agencyAddress, agency.agentAddress as `0x${string}`)
+                    ctx.session.wrapPrice = wrapAgencyPrice[0] + wrapAgencyPrice[1]
                     const unwrapAgencyPrice = await getAgenctBurnPrice(agencyAddress, agency.agentAddress as `0x${string}`)
 
                     const { accountAddress, ethBalance } = await getTelegramAddress(userId)
@@ -211,10 +232,20 @@ dynamicMenu
                     const wrapShow = fmt(
                         ["", "\n", "\n", "\n"],
                         fmt`Wrap Price: ${bold(formatUnits(wrapAgencyPrice[0], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
-                        fmt`Wrap Fee: ${bold(formatUnits(wrapAgencyPrice[0], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
+                        fmt`Wrap Fee: ${bold(formatUnits(wrapAgencyPrice[1], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
                         fmt`Unwrap: ${bold(formatUnits(unwrapAgencyPrice[0] - unwrapAgencyPrice[1], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
                         fmt`Account Balance: ${bold(formatUnits(accountBalance, agencyTokenData.decimals))} ${agencyTokenData.symbol}`
                     )
+
+                    if (accountBalance < wrapAgencyPrice[0] + wrapAgencyPrice[1]) {
+                        await ctx.replyFmt(
+                            wrapShow,
+                            { reply_markup: deleteMenu }
+                        )
+
+                        return
+                    }
+
                     if (isApproved) {
                         await ctx.replyFmt(
                             wrapShow,
@@ -241,6 +272,31 @@ dynamicMenu
         await ctx.conversation.enter("addAgency");
     });
 
+const unwrapMenu = new Menu<MyContext>("unwrap");
+unwrapMenu.dynamic(async (ctx, range) => {
+    const userId = ctx.from?.id || 0
+    const { accountAddress } = await getTelegramAddress(userId)
+
+    const agencyAddress = ctx.session.agencyAddress as `0x${string}`
+    
+    const accountAgents = await getAgentInfo(accountAddress, agencyAddress)
+
+    if (accountAgents.length === 0) {
+        await ctx.reply("No Agent")
+        return
+    }
+    for (const agent of accountAgents) {
+        range
+            .text(agent.name, async (ctx) => {
+                const unwrapHash = await unwrapAgency(BigInt(agent.tokenId), agencyAddress, userId)
+                await ctx.replyFmt(fmt`Unwrap Hash: ${link(unwrapHash, `https://sepolia.etherscan.io/tx/${unwrapHash}`)}`)
+            })
+            .row();
+    }
+})
+
+bot.use(unwrapMenu)
+bot.use(deleteMenu)
 bot.use(wrapAndUnwrapMenu)
 bot.use(dynamicMenu)
 bot.use(walletMenu)

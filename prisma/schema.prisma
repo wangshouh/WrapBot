@@ -29,13 +29,13 @@ model TokenInfo {
 }
 
 model Agency {
-  accountId      BigInt
-  account       Account   @relation(fields: [accountId], references: [telegramUserId])
+  accountId     BigInt
+  account       Account    @relation(fields: [accountId], references: [telegramUserId])
   agencyName    String
   agencyAddress String
   agentAddress  String
   tokenAddress  String
   token         TokenInfo? @relation(fields: [tokenAddress], references: [tokenAddress])
-  
+
   @@id([accountId, agencyAddress])
 }
