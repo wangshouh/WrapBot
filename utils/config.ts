@@ -17,7 +17,8 @@ interface agencyConfig {
 
 export const rpcUrl = process.env.RPC_URL
 export const MNEMONIC_CODE = process.env.MNEMONIC_CODE as string
-const APIURL = 'https://api.thegraph.com/subgraphs/name/amandafanny/erc7527/graphql'
+export const ROUTER = "0x92827908C6c9191f158890cb1ce8D308423f627b" as `0x${string}`
+// const APIURL = 'https://api.thegraph.com/subgraphs/name/amandafanny/erc7527/graphql'
 
 export const prisma = new PrismaClient({
     log: ['query', 'error'],

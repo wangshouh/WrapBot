@@ -14,28 +14,28 @@ datasource db {
 }
 
 model Account {
-  id             Int              @id @default(autoincrement())
-  telegramUserId BigInt           @unique
-  address        String           @default("0")
-  createdAt      DateTime         @default(now())
-  tokens         AccountBalance[]
+  id             Int      @id @default(autoincrement())
+  telegramUserId BigInt   @unique
+  address        String   @default("0")
+  createdAt      DateTime @default(now())
   agencys        Agency[]
 }
 
-model AccountBalance {
-  id           Int     @id @default(autoincrement())
-  accounId     BigInt  @unique
-  account      Account @relation(fields: [accounId], references: [telegramUserId])
-  tokenAddress String
-  tokenName    String
-  balance      Float
+model TokenInfo {
+  tokenAddress String   @id
+  symbol       String
+  decimals     Int
+  Agency       Agency[]
 }
 
 model Agency {
-  id            Int     @id @default(autoincrement())
-  accounId      BigInt
-  account       Account @relation(fields: [accounId], references: [telegramUserId])
+  accountId      BigInt
+  account       Account   @relation(fields: [accountId], references: [telegramUserId])
   agencyName    String
   agencyAddress String
   agentAddress  String
+  tokenAddress  String
+  token         TokenInfo? @relation(fields: [tokenAddress], references: [tokenAddress])
+  
+  @@id([accountId, agencyAddress])
 }

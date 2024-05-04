@@ -1,7 +1,7 @@
 import { mnemonicToAccount } from 'viem/accounts'
 import { MNEMONIC_CODE, publicClient } from './config'
 import { prisma } from './config'
-import { toHex } from 'viem';
+import { erc20Abi, toHex } from 'viem';
 
 export const getTelegramAddress = async (telegramId: number) => {
     let accountAddress: `0x${string}`;
@@ -46,6 +46,20 @@ export const getTelegramAddress = async (telegramId: number) => {
     return { accountAddress, ethBalance }
 }
 
+export const getERC20Balance = async (accountAddress: `0x${string}`, tokenAddress: `0x${string}`, ethBalance: bigint) => {
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+        return ethBalance
+    } else {
+        const erc20Balance = await publicClient.readContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [accountAddress]
+        })
+
+        return erc20Balance
+    }
+}
 export const getTelegramPrivKey = async (telegramId: number) => {
     const userDb = await prisma.account.upsert({
         create: {

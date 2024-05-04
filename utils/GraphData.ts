@@ -1,4 +1,4 @@
-export const generateAgencyInfoGraphql = (agencyAddress: string) => `{\"query\":\"query QueryDotAgency {\\n  dotAgencies(\\n    where: {agencyInstance_: {id: \\\"${agencyAddress}\\\"}}\\n  ) {\\n    agencyImplementation\\n    appImplementation\\n    agencyInstance {\\n      id\\n      mintFeePercent\\n      swap\\n      tvl\\n      burnFeePercent\\n      fee\\n    }\\n    appInstance {\\n      id\\n      name\\n      totalSupply\\n    }\\n    mintPrice\\n  }\\n}\",\"operationName\":\"QueryDotAgency\",\"extensions\":{}}`
+export const generateAgencyInfoGraphql = (agencyAddress: string) => `{\"query\":\"query QueryDotAgency {\\n  dotAgencies(\\n    where: {agencyInstance_: {id: \\\"${agencyAddress}\\\"}}\\n  ) {\\n    agencyImplementation\\n    appImplementation\\n    agencyInstance {\\n      id\\n      mintFeePercent\\n      swap\\n      tvl\\n      burnFeePercent\\n      fee\\n      currency {\\n      id\\n        decimals\\n        symbol\\n      }\\n    }\\n    appInstance {\\n      id\\n      name\\n      totalSupply\\n    }\\n    mintPrice\\n  }\\n}\",\"operationName\":\"QueryDotAgency\",\"extensions\":{}}`
 
 interface DotAgencyData {
   agencyInstance: {
@@ -6,7 +6,12 @@ interface DotAgencyData {
     swap: bigint,
     tvl: bigint,
     mintFeePercent: number,
-    burnFeePercent: number
+    burnFeePercent: number,
+    currency: {
+      id: `0x${string}`,
+      decimals: number,
+      symbol: string
+    }
   },
   appInstance: {
     id: `0x${string}`,
@@ -40,4 +45,4 @@ export const getAgencyInfo = async (agencyAddress: string) => {
   return result.data.dotAgencies[0]
 }
 
-// console.log(await getAgencyInfo("0x919f4a048a033f6b64b36b07eeb384c3332b2681"))
+// console.log(await getAgencyInfo("0xe47cdb0c949cdb5d129f44c76632dd263f00dc57"))

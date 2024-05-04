@@ -1,10 +1,11 @@
-import { concat, createWalletClient, encodeAbiParameters, http, keccak256, parseAbi, toHex } from "viem"
+import { concat, createWalletClient, encodeAbiParameters, erc20Abi, http, keccak256, maxUint256, parseAbi, toHex } from "viem"
 import { agencyABI, appABI } from "../abi/agency"
-import { prisma, publicClient, rpcUrl } from "./config"
+import { ROUTER, prisma, publicClient, rpcUrl } from "./config"
 import { agentABI } from "../abi/agent"
 import { getTelegramAddress, getTelegramPrivKey } from "./Account"
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
+import { routerABI } from "../abi/router"
 
 export const getAgencyStrategy = async (agencyAddress: `0x${string}`) => {
     const agencyStrategy = await publicClient.readContract({
@@ -38,6 +39,30 @@ export const getERC20Name = async (tokenAddress: `0x${string}`) => {
             functionName: "name",
         })
         return name
+    }
+}
+
+export const getTokenBalace = async (tokenAddress: `0x${string}`, userAddress: `0x${string}`) => {
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+    }
+}
+
+export const isRouterApprove = async (tokenAddress: `0x${string}`, userAddress: `0x${string}`) => {
+    if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+        return true
+    } else {
+        const approvedValue = await publicClient.readContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "allowance",
+            args: [userAddress, ROUTER]
+        })
+        // console.log(`Approve Value: ${approvedValue}`)
+        if (approvedValue == maxUint256) {
+            return true
+        } else {
+            return false
+        }
     }
 }
 
@@ -135,6 +160,18 @@ const getWalletClient = async (telegramId: number) => {
     return { account, walletClient }
 }
 
+export const getAgencyDataFromDb = async (agencyAddress: `0x${string}`) => {
+    const agencyData = await prisma.agency.findFirst({
+        where: {
+            agencyAddress: agencyAddress
+        },
+        include: {
+            token: true
+        }
+    })
+
+    return agencyData
+}
 export const wrapAgency = async (name: string, price: bigint, agencyAddress: `0x${string}`, telegramId: number) => {
     const { account, walletClient } = await getWalletClient(telegramId)
 
@@ -163,6 +200,22 @@ export const wrapAgency = async (name: string, price: bigint, agencyAddress: `0x
 
 }
 
+export const wrapAgencyByRouter = async (name: string, price: bigint, agencyAddress: `0x${string}`, telegramId: number) => {
+    const { account, walletClient } = await getWalletClient(telegramId)
+
+    const { request, result } = await publicClient.simulateContract({
+        account,
+        address: ROUTER,
+        abi: routerABI,
+        functionName: "wrap",
+        args: [agencyAddress, price, name]
+    })
+
+    const mintHash = await walletClient.writeContract(request)
+
+    return { tokenId: result, mintHash }
+}
+
 export const unwrapAgency = async (tokenId: bigint, agencyAddress: `0x${string}`, telegramId: number) => {
     const { account, walletClient } = await getWalletClient(telegramId)
 
@@ -187,6 +240,23 @@ export const unwrapAgency = async (tokenId: bigint, agencyAddress: `0x${string}`
 
     return burnHash
 }
+
+export const approveRouter = async (tokenAddress: `0x${string}`, telegramId: number) => {
+    const { account, walletClient } = await getWalletClient(telegramId)
+
+    const { request } = await publicClient.simulateContract({
+        account,
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [ROUTER, maxUint256]
+    })
+
+    const approveHash = await walletClient.writeContract(request)
+
+    return approveHash
+}
+
 export const isApproveOrOwner = async (appAddress: `0x${string}`, tokenId: bigint, telegramId: number) => {
     let nftOwner: `0x${string}`
 

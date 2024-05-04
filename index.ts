@@ -1,13 +1,15 @@
 import { Bot, Context, GrammyError, HttpError, session, type SessionFlavor } from "grammy";
-import { formatEther, isAddress, parseEther } from "viem";
-import { existAgentName, getAgenctBurnPrice, getAgencyStrategy, getAgentMaxSupply, getAgentMintPrice, getAgentName, getERC20Name, isApproveOrOwner, unwrapAgency, wrapAgency } from "./utils/AgencyStrategy";
+import { formatEther, formatUnits, isAddress, parseEther, parseUnits, zeroAddress } from "viem";
+import { approveRouter, existAgentName, getAgenctBurnPrice, getAgencyDataFromDb, getAgencyStrategy, getAgentMaxSupply, getAgentMintPrice, getAgentName, getERC20Name, isApproveOrOwner, isRouterApprove, unwrapAgency, wrapAgency, wrapAgencyByRouter } from "./utils/AgencyStrategy";
 import { Menu, MenuRange } from "@grammyjs/menu";
-import { getAccountAgencys, getTelegramAddress, getTelegramPrivKey } from "./utils/Account";
+import { getAccountAgencys, getERC20Balance, getTelegramAddress, getTelegramPrivKey } from "./utils/Account";
 import { bold, fmt, hydrateReply, code, link } from "@grammyjs/parse-mode";
 import type { ParseModeFlavor } from "@grammyjs/parse-mode";
 import { conversations, type Conversation, type ConversationFlavor, createConversation } from "@grammyjs/conversations";
 import { prisma } from "./utils/config";
 import { getAgencyInfo } from "./utils/GraphData";
+import { getBalance } from "viem/actions";
+import { connect } from "bun";
 
 interface SessionData {
     agencyAddress: string;
@@ -33,26 +35,50 @@ const addAgency = async (conversation: MyConversation, ctx: MyContext) => {
         // console.log(agencyAddress)
         try {
             const agencyData = await getAgencyInfo(agencyAddress)
+            const telegramAddress = await getTelegramAddress(ctx.from!.id)
 
             if (agencyData === undefined) {
                 await ctx.replyFmt(fmt`Agency Not Exist`)
             } else {
+                const accountBalance = await getERC20Balance(telegramAddress.accountAddress, agencyData.agencyInstance.currency.id as `0x${string}`, telegramAddress.ethBalance)
                 await ctx.replyFmt(
                     fmt(
-                        ["", "\n", "\n", "\n", "\n", ""],
+                        ["", "\n", "\n", "\n", "\n", "\n", ""],
                         fmt`Agency Name: ${bold(agencyData.appInstance.name)}`,
-                        fmt`TVL: ${bold(formatEther(agencyData.agencyInstance.tvl))} ETH`,
+                        fmt`TVL: ${bold(
+                            formatUnits(
+                                agencyData.agencyInstance.tvl,
+                                agencyData.agencyInstance.currency.decimals
+                            )
+                        )} ${agencyData.agencyInstance.currency.symbol}`,
                         fmt`Mint Fee Percent: ${(agencyData.agencyInstance.mintFeePercent / 100).toFixed(2) + '%'}`,
-                        fmt`Burn Fee Percent: ${(agencyData.agencyInstance.burnFeePercent / 100).toFixed(2) + '%'}`
+                        fmt`Burn Fee Percent: ${(agencyData.agencyInstance.burnFeePercent / 100).toFixed(2) + '%'}`,
+                        fmt`Account Balance: ${bold(formatUnits(accountBalance, agencyData.agencyInstance.currency.decimals))} ${agencyData.agencyInstance.currency.symbol}`,
                     )
                 )
+                
+                await prisma.tokenInfo.upsert({
+                    where: {
+                        tokenAddress: agencyData.agencyInstance.currency.id
+                    },
+                    create: {
+                        tokenAddress: agencyData.agencyInstance.currency.id,
+                        symbol: agencyData.agencyInstance.currency.symbol,
+                        decimals: agencyData.agencyInstance.currency.decimals
+                    },
+                    update: {
+                        symbol: agencyData.agencyInstance.currency.symbol,
+                        decimals: agencyData.agencyInstance.currency.decimals
+                    }
+                })
 
                 await prisma.agency.create({
                     data: {
-                        accounId: ctx.from!.id,
+                        accountId: ctx.from!.id,
                         agencyAddress: agencyAddress,
                         agentAddress: agencyData.appInstance.id,
-                        agencyName: agencyData.appInstance.name
+                        agencyName: agencyData.appInstance.name,
+                        tokenAddress: agencyData.agencyInstance.currency.id,
                     }
                 })
             }
@@ -67,27 +93,33 @@ const addAgency = async (conversation: MyConversation, ctx: MyContext) => {
 
 const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyContext) => {
     const agencyAddress = ctx.session.agencyAddress as `0x${string}`;
-    const agencyStrategy = await getAgencyStrategy(agencyAddress)
+    // const agencyStrategy = await getAgencyStrategy(agencyAddress)
+    const agencyStrategy = await getAgencyDataFromDb(agencyAddress as `0x${string}`)!
 
-    await ctx.reply("Please input Maximum cost available for mint(in ether)");
+    await ctx.reply("Please input Maximum cost available for mint");
     const { message: slippageMessage } = await conversation.wait();
-    const slippagePrice = parseEther(slippageMessage!.text!);
+    const slippagePrice = parseUnits(slippageMessage!.text!, agencyStrategy!.token!.decimals!);
 
     await ctx.reply("Please enter Agent Name: ");
     const { message: agentName } = await conversation.wait();
 
     // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
 
-    const existName = await existAgentName(agentName!.text!, agencyStrategy[0])
+    const existName = await existAgentName(agentName!.text!, agencyStrategy!.agentAddress as `0x${string}`)
 
     if (existName) {
         await ctx.reply("Agent name already exists")
     } else {
         // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
         const normalName = agentName!.text!.toLowerCase()
-        const { tokenId, mintHash } = await wrapAgency(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
 
-        await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+        if (agencyStrategy?.tokenAddress === zeroAddress) {
+            const { tokenId, mintHash } = await wrapAgency(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
+            await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+        } else {
+            const { tokenId, mintHash } = await wrapAgencyByRouter(normalName, slippagePrice, agencyAddress, ctx.from!.id!)
+            await ctx.replyFmt(fmt`Mint Hash: ${link(mintHash, `https://sepolia.etherscan.io/tx/${mintHash}`)}\nToken ID: ${code(tokenId)}`)
+        }
     }
 }
 
@@ -137,9 +169,20 @@ const walletMenu = new Menu<ParseModeFlavor<Context>>('wallet')
 const wrapAndUnwrapMenu = new Menu<ParseModeFlavor<MyContext>>('wrapAndUnwrap')
     .text("Wrap", async (ctx) => {
         await ctx.conversation.enter("wrapAgencyConversation")
-    }).row()
+    })
     .text("Unwrap", async (ctx) => {
         await ctx.conversation.enter("unwrapAgencyConversation")
+    }).row()
+    .text("Delete", async (ctx) => {
+        await prisma.agency.delete({
+            where: {
+                accountId_agencyAddress: {
+                    accountId: BigInt(ctx.from!.id),
+                    agencyAddress: ctx.session.agencyAddress                  
+                }
+            }
+        })
+        await ctx.reply("Delete Success")
     })
 
 const dynamicMenu = new Menu<MyContext>("dynamic");
@@ -147,26 +190,48 @@ dynamicMenu
     .dynamic(async (ctx, range) => {
         const userId = ctx.from?.id || 0
 
-        const accounAgencys = await getAccountAgencys(userId)
+        const accountAgencys = await getAccountAgencys(userId)
 
-        for (const agency of accounAgencys) {
+        for (const agency of accountAgencys) {
             console.log(agency.agencyName)
             range
                 .text(agency.agencyName, async (ctx) => {
                     ctx.session.agencyAddress = agency.agencyAddress
                     const agencyAddress = agency.agencyAddress as `0x${string}`
-                    const agencyStrategy = await getAgencyStrategy(agencyAddress)
-                    const wrapAgencyPrice = await getAgentMintPrice(agencyAddress, agencyStrategy[0])
-                    const unwrapAgencyPrice = await getAgenctBurnPrice(agencyAddress, agencyStrategy[0])
-                    await ctx.replyFmt(
-                        fmt(
-                            ["", "\n", "\n"],
-                            fmt`Wrap Price: ${bold(formatEther(wrapAgencyPrice[0]))} ETH`,
-                            fmt`Wrap Fee: ${bold(formatEther(wrapAgencyPrice[1]))} ETH`,
-                            fmt`Unwrap: ${bold(formatEther(unwrapAgencyPrice[0] - unwrapAgencyPrice[1]))} ETH`
-                        ),
-                        { reply_markup: wrapAndUnwrapMenu }
+                    // const agencyStrategy = await getAgencyStrategy(agencyAddress)
+                    const wrapAgencyPrice = await getAgentMintPrice(agencyAddress, agency.agentAddress as `0x${string}`)
+                    const unwrapAgencyPrice = await getAgenctBurnPrice(agencyAddress, agency.agentAddress as `0x${string}`)
+
+                    const { accountAddress, ethBalance } = await getTelegramAddress(userId)
+                    const isApproved = await isRouterApprove(agency.tokenAddress as `0x${string}`, accountAddress)
+
+                    const agencyTokenData = (await getAgencyDataFromDb(agency.agencyAddress as `0x${string}`))!.token!
+                    const accountBalance = await getERC20Balance(accountAddress, agencyTokenData.tokenAddress as `0x${string}`, ethBalance)
+
+                    const wrapShow = fmt(
+                        ["", "\n", "\n", "\n"],
+                        fmt`Wrap Price: ${bold(formatUnits(wrapAgencyPrice[0], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
+                        fmt`Wrap Fee: ${bold(formatUnits(wrapAgencyPrice[0], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
+                        fmt`Unwrap: ${bold(formatUnits(unwrapAgencyPrice[0] - unwrapAgencyPrice[1], agencyTokenData.decimals))} ${agencyTokenData.symbol}`,
+                        fmt`Account Balance: ${bold(formatUnits(accountBalance, agencyTokenData.decimals))} ${agencyTokenData.symbol}`
                     )
+                    if (isApproved) {
+                        await ctx.replyFmt(
+                            wrapShow,
+                            { reply_markup: wrapAndUnwrapMenu }
+                        )
+                    } else {
+                        await ctx.replyFmt(
+                            wrapShow,
+                            {
+                                reply_markup: wrapAndUnwrapMenu.row().text("Approve", async (ctx) => {
+                                    const approveHash = await approveRouter(agency.tokenAddress as `0x${string}`, ctx.from?.id!)
+                                    await ctx.replyFmt(fmt`Unwrap Hash: ${link(approveHash, `https://sepolia.etherscan.io/tx/${approveHash}`)}`)
+                                })
+                            }
+                        )
+                    }
+
                 })
                 .row();
         }
