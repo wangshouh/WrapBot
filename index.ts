@@ -102,7 +102,7 @@ const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyConte
     if (slippagePrice < wrapPrice) {
         ctx.replyFmt(fmt`Slippage price less than wrap price`)
     } else {
-        await ctx.reply("Please enter Agent Name: ");
+        await ctx.reply("Please enter ERC7527 Name: ");
         const { message: agentName } = await conversation.wait();
     
         // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
@@ -110,7 +110,7 @@ const wrapAgencyConversation = async (conversation: MyConversation, ctx: MyConte
         const existName = await existAgentName(agentName!.text!, agencyStrategy!.agentAddress as `0x${string}`)
     
         if (existName) {
-            await ctx.reply("Agent name already exists")
+            await ctx.reply("ERC7527 name already exists")
         } else {
             // ctx.replyFmt(fmt`Agent Name: ${agentName!.text!} slippage price: ${slippagePrice.toString(10)}`)
             const normalName = agentName!.text!.toLowerCase()
@@ -130,10 +130,10 @@ const unwrapAgencyConversation = async (conversation: MyConversation, ctx: MyCon
     const agencyAddress = ctx.session.agencyAddress as `0x${string}`;
     const agencyStrategy = await getAgencyStrategy(agencyAddress)
 
-    await ctx.reply("Please enter Agent NFT ID: ");
+    await ctx.reply("Please enter ERC7527 NFT ID: ");
 
     const { message: agencyTokenId } = await conversation.wait();
-    // const agencyTokenId = BigInt(await input({ message: 'Enter Agent NFT ID: ' }))
+    // const agencyTokenId = BigInt(await input({ message: 'Enter  NFT ID: ' }))
     const authorityExist = await isApproveOrOwner(agencyStrategy[0], BigInt(agencyTokenId!.text!), ctx.from!.id!)
 
     if (!authorityExist) {
@@ -189,7 +189,7 @@ const wrapAndUnwrapMenu = new Menu<ParseModeFlavor<MyContext>>('wrapAndUnwrap')
     .text("Unwrap", async (ctx) => {
         // await ctx.conversation.enter("unwrapAgencyConversation")
         await ctx.replyFmt(
-            fmt`Select Agent to unwrap`,
+            fmt`Select ERC7527 to unwrap`,
             { reply_markup: unwrapMenu }
         )
     }).row()
@@ -282,7 +282,7 @@ unwrapMenu.dynamic(async (ctx, range) => {
     const accountAgents = await getAgentInfo(accountAddress, agencyAddress)
 
     if (accountAgents.length === 0) {
-        await ctx.reply("No Agent")
+        await ctx.reply("No ERC7527")
         return
     }
     for (const agent of accountAgents) {
