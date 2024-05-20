@@ -35,7 +35,7 @@ interface DotAgenciesData {
 }
 
 export const getAgencyInfo = async (agencyAddress: string) => {
-  const response = await fetch("https://api.thegraph.com/subgraphs/name/amandafanny/erc7527",
+  const response = await fetch("https://api.studio.thegraph.com/proxy/51301/erc7527/v0.0.1.a4",
     {
       body: generateAgencyInfoGraphql(agencyAddress.toLowerCase()),
       method: "POST",
