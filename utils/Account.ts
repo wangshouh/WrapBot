@@ -60,6 +60,7 @@ export const getERC20Balance = async (accountAddress: `0x${string}`, tokenAddres
         return erc20Balance
     }
 }
+
 export const getTelegramPrivKey = async (telegramId: number) => {
     const userDb = await prisma.account.upsert({
         create: {

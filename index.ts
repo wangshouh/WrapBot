@@ -257,7 +257,7 @@ dynamicMenu
                             {
                                 reply_markup: wrapAndUnwrapMenu.row().text("Approve", async (ctx) => {
                                     const approveHash = await approveRouter(agency.tokenAddress as `0x${string}`, ctx.from?.id!)
-                                    await ctx.replyFmt(fmt`Unwrap Hash: ${link(approveHash, `https://sepolia.etherscan.io/tx/${approveHash}`)}`)
+                                    await ctx.replyFmt(fmt`Approve Hash: ${link(approveHash, `https://sepolia.etherscan.io/tx/${approveHash}`)}`)
                                 })
                             }
                         )
